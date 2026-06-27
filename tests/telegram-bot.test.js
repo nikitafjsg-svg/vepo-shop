@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   buildOrderMessage,
-  parseCommand,
+  handleTelegramCommand,
   isAdminUpdate
 } = require('../lib/telegram-bot.js');
 
@@ -26,13 +26,13 @@ test('buildOrderMessage formats customer contacts and order items', () => {
   assert.match(message, /Комментарий: вечером/);
 });
 
-test('parseCommand understands product management commands', () => {
-  assert.deepEqual(parseCommand('/products'), { name: 'products', args: '' });
-  assert.deepEqual(parseCommand('/delete #7001'), { name: 'delete', args: '#7001' });
-  assert.deepEqual(
-    parseCommand('/add MAD Манго | liquids | MAD | 600 | #7001'),
-    { name: 'add', args: 'MAD Манго | liquids | MAD | 600 | #7001' }
-  );
+test('telegram bot only supports order notifications and does not require Supabase service role', async () => {
+  const start = await handleTelegramCommand({ text: '/start' });
+  const products = await handleTelegramCommand({ text: '/products' });
+
+  assert.match(start, /уведомления/i);
+  assert.doesNotMatch(start, /\/add|\/delete|SUPABASE_SERVICE_ROLE_KEY/i);
+  assert.match(products, /только.*уведомления/i);
 });
 
 test('isAdminUpdate allows only configured Telegram admin id', () => {

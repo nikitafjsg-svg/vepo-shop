@@ -1,69 +1,30 @@
-# Telegram-бот для заказов и управления
+# Telegram-уведомления о заказах
 
-## Что уже должно быть в Vercel
+Бот используется только для уведомлений о новых заказах.
 
-В `Project Settings → Environment Variables`:
+## Нужные переменные в Vercel
 
-- `TELEGRAM_BOT_TOKEN` — токен от BotFather.
-- `ADMIN_TELEGRAM_ID` — ваш Telegram ID.
-
-После добавления переменных сделайте redeploy проекта.
-
-## Включить webhook после деплоя
-
-Откройте в браузере:
+В `Project Settings → Environment Variables` должны быть:
 
 ```txt
-https://ВАШ-ДОМЕН.vercel.app/api/set-telegram-webhook
+TELEGRAM_BOT_TOKEN
+ADMIN_TELEGRAM_ID
 ```
 
-Для текущего домена это будет примерно:
+`SUPABASE_SERVICE_ROLE_KEY` больше не нужен.
+
+## После деплоя
+
+Откройте:
 
 ```txt
 https://vepo-shop.vercel.app/api/set-telegram-webhook
 ```
 
-Если ответ содержит `"ok": true`, бот подключён.
+Если в ответе есть `"ok": true`, webhook подключён.
 
 ## Проверка
 
-1. Напишите своему боту `/start`.
+1. Напишите боту `/start`.
 2. Оформите тестовый заказ на сайте.
-3. В Telegram должно прийти уведомление о заказе.
-
-## Команды бота
-
-```txt
-/start
-/help
-/products
-/add Название | category | brand | price | #sku
-/delete #sku
-```
-
-Пример:
-
-```txt
-/add MAD Манго | liquids | MAD | 600 | #7020
-```
-
-## Чтобы команды товаров работали полностью
-
-Нужно:
-
-1. В Supabase SQL Editor выполнить `supabase-commerce-schema.sql`.
-2. В Vercel добавить ещё один secret:
-
-```txt
-SUPABASE_SERVICE_ROLE_KEY
-```
-
-Это не anon key. Это секретный service role key из Supabase. Его нельзя публиковать на GitHub и нельзя вставлять в HTML.
-
-Опционально можно добавить:
-
-```txt
-SUPABASE_URL
-```
-
-Но если не добавить, код использует текущий URL проекта Supabase.
+3. В Telegram должно прийти уведомление с именем, телефоном, Telegram, товарами и суммой.

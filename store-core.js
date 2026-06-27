@@ -51,7 +51,7 @@
     ['p15','SMOKE KITCHEN Booster','boosters','SMOKE KITCHEN','Pure',280,'#7015',false,'bottle']
   ].map((p, i) => ({
     id:p[0], name:p[1], category:p[2], brand:p[3], series:p[4], price:p[5], sku:p[6],
-    featured:p[7], image:image(p[3], palette[i % palette.length], p[8]), createdAt:'2026-06-26T00:00:00.000Z'
+    featured:p[7], stock:1, available:true, image:image(p[3], palette[i % palette.length], p[8]), createdAt:'2026-06-26T00:00:00.000Z'
   }));
 
   const defaultReviews = [
@@ -92,10 +92,17 @@
   function seedData() {
     if (typeof localStorage === 'undefined') return;
     if (!localStorage.getItem(KEYS.products)) write(KEYS.products, defaultProducts);
+    else write(KEYS.products, read(KEYS.products, []).map(withInventory));
     if (!localStorage.getItem(KEYS.reviews)) write(KEYS.reviews, defaultReviews);
     if (!localStorage.getItem(KEYS.settings)) write(KEYS.settings, defaultSettings);
     if (!localStorage.getItem(KEYS.cart)) write(KEYS.cart, []);
     if (!localStorage.getItem(KEYS.orders)) write(KEYS.orders, []);
+  }
+
+  function withInventory(product) {
+    const rawStock = Number(product?.stock);
+    const stock = Number.isFinite(rawStock) && rawStock >= 0 ? Math.floor(rawStock) : 1;
+    return { ...product, stock, available: product?.available === false ? false : stock > 0 };
   }
 
   function cartSummary(cart, products) {
@@ -151,8 +158,9 @@
     const prefix = `PV-${stamp}-`;
     const sequence = (existing || []).filter(o => String(o.id).startsWith(prefix)).length + 1;
     const items = (cart || []).map(item => {
-      const p = (products || []).find(x => x.id === item.productId);
-      return p ? { productId:p.id, name:p.name, sku:p.sku, price:Number(p.price), qty:Number(item.qty) } : null;
+      const p = (products || []).map(withInventory).find(x => x.id === item.productId);
+      const qty = Math.min(Math.max(0, Number(item.qty) || 0), Number(p?.stock) || 0);
+      return p && p.available && qty > 0 ? { productId:p.id, name:p.name, sku:p.sku, price:Number(p.price), qty } : null;
     }).filter(Boolean);
     return {
       id:`${prefix}${String(sequence).padStart(3,'0')}`,
@@ -180,17 +188,18 @@
     const brand = String(input.brand || '').trim();
     const price = Number(input.price);
     if (!name || !category || !brand || !price || price < 0) throw new Error('Название, категория, бренд и цена обязательны');
+    const stock = Math.max(0, Math.floor(Number(input.stock ?? 1) || 0));
     return {
       id:input.id || `p-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
       name, category, brand, series:String(input.series || 'Премиум серия').trim(),
       price, sku:input.sku || nextSku(products), image:input.image || image(brand, palette[(products || []).length % palette.length]),
-      featured:!!input.featured, createdAt:input.createdAt || new Date().toISOString()
+      featured:!!input.featured, stock, available:input.available === undefined ? stock > 0 : !!input.available && stock > 0, createdAt:input.createdAt || new Date().toISOString()
     };
   }
 
   return {
     KEYS, categories, defaultProducts, defaultReviews, defaultSettings,
-    safeParse, isAdminPassword, read, write, seedData, cartSummary, validateCheckout,
+    safeParse, isAdminPassword, read, write, seedData, withInventory, cartSummary, validateCheckout,
     whatsappUrl, nextSku, filterProducts, sortReviews, createOrder,
     createReview, normalizeProduct
   };

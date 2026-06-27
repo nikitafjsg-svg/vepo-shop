@@ -55,7 +55,7 @@ test('createOrder builds a new order with total and status', () => {
   const order = Store.createOrder({
     customer: { name: 'Анна', phone: '+79000000000' },
     cart: [{ productId: 'a', qty: 2 }],
-    products: [{ id: 'a', name: 'MAD Манго', price: 600 }],
+    products: [{ id: 'a', name: 'MAD Манго', price: 600, stock: 2, available: true }],
     now: new Date('2026-06-26T10:00:00Z'),
     existing: []
   });

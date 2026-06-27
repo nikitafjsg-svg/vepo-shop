@@ -33,11 +33,7 @@ module.exports = async function handler(req, res) {
     const chatId = update?.message?.chat?.id || adminId;
     const text = update?.message?.text || '';
     const answer = await handleTelegramCommand({
-      text,
-      env: {
-        SUPABASE_URL: process.env.SUPABASE_URL,
-        SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY
-      }
+      text
     });
 
     await sendTelegramMessage({ token, chatId, text: answer });
