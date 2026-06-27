@@ -37,6 +37,7 @@
   <div class="toast" id="toast"></div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase-config.js"></script>
+  <script src="cloud-store.js"></script>
   <script src="chat-client.js"></script>
   <script src="store-core.js"></script>
   <script>
@@ -45,6 +46,7 @@
     const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
     const money=n=>new Intl.NumberFormat('ru-RU').format(n)+' ₽';
     const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    const cloudStore=VapeCloudStore.createClient();
     const getProducts=()=>VapeStore.read(VapeStore.KEYS.products,VapeStore.defaultProducts).map(VapeStore.withInventory);
     const getOrders=()=>VapeStore.read(VapeStore.KEYS.orders,[]);
     const getReviews=()=>VapeStore.read(VapeStore.KEYS.reviews,VapeStore.defaultReviews);
@@ -54,7 +56,7 @@
     let imageData='';
 
     function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}
-    function enter(){sessionStorage.setItem('pv_admin_session','1');$('#admin-login').classList.add('hidden');$('#admin-app').classList.remove('hidden');renderAll()}
+    async function enter(){sessionStorage.setItem('pv_admin_session','1');$('#admin-login').classList.add('hidden');$('#admin-app').classList.remove('hidden');await syncAdminFromCloud();renderAll()}
     $('#login-form').addEventListener('submit',e=>{e.preventDefault();const card=e.currentTarget;if(VapeStore.isAdminPassword(new FormData(card).get('password'))){enter()}else{$('#login-error').textContent='Неверный пароль';card.classList.remove('shake');void card.offsetWidth;card.classList.add('shake')}});
     $('#logout').onclick=()=>{sessionStorage.removeItem('pv_admin_session');location.reload()};
     if(sessionStorage.getItem('pv_admin_session')==='1')enter();
@@ -71,9 +73,9 @@
     $('#product-category').innerHTML=Object.entries(VapeStore.categories).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('');
     $('#image-file').addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;try{imageData=await compressImage(file);$('#product-form').image.value=imageData;$('#image-preview').src=imageData;$('#image-preview').classList.remove('hidden')}catch(_){toast('Не удалось обработать изображение')}});
     function compressImage(file){return new Promise((resolve,reject)=>{const img=new Image(),url=URL.createObjectURL(file);img.onload=()=>{const max=700,scale=Math.min(1,max/Math.max(img.width,img.height)),c=document.createElement('canvas');c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);c.getContext('2d').drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(url);resolve(c.toDataURL('image/jpeg',.78))};img.onerror=reject;img.src=url})}
-    $('#product-form').addEventListener('submit',e=>{e.preventDefault();const list=getProducts(),data=Object.fromEntries(new FormData(e.currentTarget));data.featured=e.currentTarget.featured.checked;data.available=e.currentTarget.available.checked;try{const p=VapeStore.normalizeProduct(data,list);const index=list.findIndex(x=>x.id===p.id);if(index>=0)list[index]=p;else list.push(p);if(!VapeStore.write(VapeStore.KEYS.products,list))throw new Error('Хранилище переполнено. Выберите изображение меньшего размера.');toast(index>=0?'Товар обновлён':'Товар добавлен');resetProductForm();renderAll()}catch(err){toast(err.message)}});
+    $('#product-form').addEventListener('submit',async e=>{e.preventDefault();const list=getProducts(),data=Object.fromEntries(new FormData(e.currentTarget));data.featured=e.currentTarget.featured.checked;data.available=e.currentTarget.available.checked;try{const p=VapeStore.normalizeProduct(data,list);const index=list.findIndex(x=>x.id===p.id);if(index>=0)list[index]=p;else list.push(p);if(!VapeStore.write(VapeStore.KEYS.products,list))throw new Error('Хранилище переполнено. Выберите изображение меньшего размера.');await cloudStore.saveProducts(list);toast(index>=0?'Товар обновлён для всех':'Товар добавлен для всех');resetProductForm();renderAll()}catch(err){toast(err.message)}});
     $('#cancel-edit').onclick=resetProductForm;
-    $('#products-table').addEventListener('click',e=>{const edit=e.target.closest('.edit-product'),del=e.target.closest('.delete-product');if(edit){const p=getProducts().find(x=>x.id===edit.dataset.id),f=$('#product-form');Object.entries(p).forEach(([k,v])=>{if(f.elements[k]&&k!=='featured'&&k!=='available')f.elements[k].value=v});f.featured.checked=!!p.featured;f.available.checked=!!p.available;imageData=p.image;$('#image-preview').src=p.image;$('#image-preview').classList.remove('hidden');$('#product-form-title').textContent='Редактировать товар';$('#product-submit').textContent='СОХРАНИТЬ ИЗМЕНЕНИЯ';$('#cancel-edit').classList.remove('hidden');scrollTo({top:0,behavior:'smooth'})}if(del&&confirm('Вы уверены? Товар будет удалён.')){VapeStore.write(VapeStore.KEYS.products,getProducts().filter(x=>x.id!==del.dataset.id));renderAll();toast('Товар удалён')}});
+    $('#products-table').addEventListener('click',async e=>{const edit=e.target.closest('.edit-product'),del=e.target.closest('.delete-product');if(edit){const p=getProducts().find(x=>x.id===edit.dataset.id),f=$('#product-form');Object.entries(p).forEach(([k,v])=>{if(f.elements[k]&&k!=='featured'&&k!=='available')f.elements[k].value=v});f.featured.checked=!!p.featured;f.available.checked=!!p.available;imageData=p.image;$('#image-preview').src=p.image;$('#image-preview').classList.remove('hidden');$('#product-form-title').textContent='Редактировать товар';$('#product-submit').textContent='СОХРАНИТЬ ИЗМЕНЕНИЯ';$('#cancel-edit').classList.remove('hidden');scrollTo({top:0,behavior:'smooth'})}if(del&&confirm('Вы уверены? Товар будет удалён.')){const next=getProducts().filter(x=>x.id!==del.dataset.id);VapeStore.write(VapeStore.KEYS.products,next);try{await cloudStore.deleteProduct(del.dataset.id);await cloudStore.saveProducts(next)}catch(err){toast(err.message);return}renderAll();toast('Товар удалён у всех')}});
 
     function renderOrders(){const list=[...getOrders()].sort((a,b)=>new Date(b.date)-new Date(a.date));$('#orders-table').innerHTML=list.map(o=>`<tr class="order-row" data-order="${o.id}"><td><b>${o.id}</b></td><td>${new Date(o.date).toLocaleString('ru-RU')}</td><td>${esc(o.customer.name)}</td><td>${esc(o.customer.phone)}</td><td>${o.items.reduce((s,i)=>s+i.qty,0)} шт.</td><td><b>${money(o.total)}</b></td><td>${statusSelect(o)}</td></tr><tr class="order-details" data-detail="${o.id}"><td colspan="7"><div class="detail-box"><div><b>Состав заказа</b>${o.items.map(i=>`<p>${esc(i.name)} × ${i.qty} — ${money(i.price*i.qty)}</p>`).join('')}</div><div><b>Контакты</b><p>Telegram: ${esc(o.customer.telegram||'не указан')}</p><p>${esc(o.customer.comment||'Без комментария')}</p></div></div></td></tr>`).join('')||'<tr><td colspan="7">Заказов пока нет</td></tr>'}
     $('#orders-table').addEventListener('click',e=>{if(e.target.closest('[data-status]'))return;const row=e.target.closest('.order-row');if(row)$(`[data-detail="${row.dataset.order}"]`).classList.toggle('open')});
@@ -85,10 +87,12 @@
     function renderReviews(){const list=VapeStore.sortReviews(getReviews(),'new');$('#admin-reviews').innerHTML=list.map(r=>`<article class="review-item"><div class="avatar">${esc(r.name.charAt(0).toUpperCase())}</div><div><b>${esc(r.name)}</b> · <small>${new Date(r.date).toLocaleDateString('ru-RU')}</small><div class="stars">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div><p>${esc(r.text)}</p></div><div class="review-actions"><button class="icon-btn feature-review" data-id="${r.id}" title="Избранный" style="${r.featured?'background:#fff4c2;color:#9b7614':''}"><i class="fa-solid fa-crown"></i></button><button class="icon-btn delete-review" data-id="${r.id}" title="Удалить"><i class="fa-regular fa-trash-can"></i></button></div></article>`).join('')||'<p>Отзывов пока нет</p>'}
     $('#admin-reviews').addEventListener('click',e=>{const fav=e.target.closest('.feature-review'),del=e.target.closest('.delete-review');let list=getReviews();if(fav){const r=list.find(x=>x.id===fav.dataset.id);r.featured=!r.featured;VapeStore.write(VapeStore.KEYS.reviews,list);renderAll();toast(r.featured?'Отзыв добавлен в избранное':'Отзыв убран из избранного')}if(del&&confirm('Удалить этот отзыв?')){list=list.filter(x=>x.id!==del.dataset.id);VapeStore.write(VapeStore.KEYS.reviews,list);renderAll();toast('Отзыв удалён')}});
     function renderSettings(){const cfg=VapeStore.read(VapeStore.KEYS.settings,VapeStore.defaultSettings),f=$('#settings-form');Object.entries(cfg).forEach(([k,v])=>{if(f.elements[k])f.elements[k].value=v})}
-    $('#settings-form').addEventListener('submit',e=>{e.preventDefault();VapeStore.write(VapeStore.KEYS.settings,Object.fromEntries(new FormData(e.currentTarget)));toast('Настройки сохранены')});
+    $('#settings-form').addEventListener('submit',async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.currentTarget));VapeStore.write(VapeStore.KEYS.settings,data);try{await cloudStore.saveSettings(data);toast('Настройки сохранены для всех')}catch(err){toast(err.message)}});
     function renderAll(){renderDashboard();renderProducts();renderOrders();renderReviews();renderSettings();if($('#chats-panel').classList.contains('active'))renderAdminChats()}
+    async function syncAdminFromCloud(){try{const [remoteProducts,remoteSettings]=await Promise.all([cloudStore.loadProducts(getProducts()),cloudStore.loadSettings(VapeStore.read(VapeStore.KEYS.settings,VapeStore.defaultSettings))]);VapeStore.write(VapeStore.KEYS.products,remoteProducts);VapeStore.write(VapeStore.KEYS.settings,remoteSettings)}catch(err){toast('Облачная синхронизация недоступна')}}
     window.addEventListener('storage',renderAll);
     adminChatUnsubscribe=adminChatApi.subscribe('',()=>renderAdminChats());
+    cloudStore.subscribe(async()=>{await syncAdminFromCloud();renderAll()});
   </script>
 </body>
 </html>
